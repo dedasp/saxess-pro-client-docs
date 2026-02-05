@@ -1,12 +1,6 @@
 # Official Documentation for the Saxess Pro
 
 
-## API Documentation Overview
-
-- Endpoints, parameters, payloads, and authentication flows described in the documents in this repository are considered **official** and **supported**.
-- The use of any undocumented endpoints, parameters, or payloads is **not supported** — **use them at your own risk and with no guarantees**.
-
----
 
 ## Standards & Specifications Compliance
 
@@ -65,4 +59,4 @@ Key characteristics:
 
 Name | Description | Version
 ------------ | ------------ | ------------
-[Saxess Pro Client Integration API](./SaxessPro-Client-API.md) | Unified API documentation for onboarding, authentication, device binding, notification signing, and verification flows | v1.0.0
+[Saxess Pro Client Integration API](./API.md) | Unified API documentation for onboarding, authentication, device binding, notification signing, and verification flows | v1.0.0
