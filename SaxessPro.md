@@ -1,17 +1,5 @@
 # Official Documentation for the Saxess Pro Client APIs
 
-## Prerequisites for Using the APIs
-Before a client application can begin integrating or calling any Saxess Pro APIs, the following onboarding steps must be completed:
-
-1. **Contact the Saxess team** at **contact@s.technology** to initiate onboarding.
-2. **Request for an Organisation** within the Saxess Pro platform.
-3. **Onboard the Organisation Admin** (primary administrator who will manage the platform).
-4. **Create Client Platforms Apps** (web, mobile, backend) that will consume Saxess Pro APIs.
-5. **Invite Employees/Users** and assign **appropriate roles** required for access and authorization.
-
->>Only after these steps are completed will API credentials and platform configurations be available for integration.
-
----
 
 ## API Documentation Overview
 
