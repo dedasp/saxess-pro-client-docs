@@ -3,7 +3,7 @@
 ## Product Overview
 
 **Saxess Pro** is a secure, biometric-first authentication platform designed for high-assurance identity verification and authorization.  
-It combines **biometric smart cards**, a **secure iOS application**, and **standards-based APIs** to deliver phishing-resistant, out-of-band authentication for enterprise and financial-grade use cases.
+It combines **biometric smart cards**, a **secure iOS application**, and ** FAPI 2.0-compliant APIs** to deliver phishing-resistant, out-of-band authentication for enterprise and financial-grade use cases.
 
 🔗 Product Page: https://s.technology/product/saxess-pro/
 
