@@ -17,8 +17,6 @@ This repository contains the **official and supported documentation** for integr
 |--------|--------|
 | [SaxessPro.md](./SaxessPro.md)| High-level overview of the Saxess Pro platform and architecture |
 | [API.md](./API.md) | **Official Client API Integration Guide** |
-| [Official Node.js SDK](https://www.npmjs.com/package/@saxess-pro/client-auth) | Ready-to-use SDK for backend integration |
-
 
 ---
 
