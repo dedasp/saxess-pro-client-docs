@@ -9,24 +9,27 @@ All endpoints listed below are **official**, **stable**, and **supported**.
 - [API](#api)
   - [/api/status](#apistatus)
     - Health-check endpoint
-  - [/api/auth/authorize](#apiauthauthorize)
-    - Initiates CIBA authentication
+  - [/api/auth/par](#apiauthpar)
+    - Pushed Authorization Request (PAR) endpoint.
+    - Used to securely register the authorization request before initiating CIBA.
+  - [/api/auth/backchannel-authentication](#apiauthbackchannel-authentication)
+    - Initiates the CIBA authentication flow using the request_uri obtained from PAR.
   - [/api/auth/token — CIBA Polling](#apiauthtoken--ciba-polling)
     - Polling endpoint for CIBA token
   - [/api/auth/token — Refresh Token](#apiauthtoken--refresh-token)
     - Exchange refresh token for new access token
-
+  - [/api/orgs/{org_id}/employees/auto-invite — Invite User/Employee](#apiorginvite)
+    - Invite a user/employee programmatically with optional auto-approval.
+    - Requests must be signed using RSA-SHA256 to ensure authenticity and integrity.
 ---
 
 ## General API Information
 - **Base Endpoint:** `https://pro-be.s.technology`
 - All responses are **JSON**
-- All requests must use:  
-  `Content-Type: application/json`
 - Authentication uses OIDC CIBA with JWT client authentication.
 - All sensitive parameters are sent via signed JWT request objects.
 - User authentication is completed out-of-band via biometric approval.
-- Client private keys must be securely stored (HSM/KMS recommended). Public keys are registered during client onboarding.
+- Client private and certificate keys must be securely stored (HSM/KMS recommended). Public keys and certificates are registered during client onboarding.
 ---
 
 # API
@@ -49,9 +52,14 @@ Health-check endpoint to confirm the API server is running.
 
 ---
 
-## /api/auth/authorize
+## /api/auth/par + /api/auth/backchannel-authentication
 
-Initiates a **CIBA Backchannel Authentication** flow.
+Initiates a **CIBA Backchannel Authentication** flow using **PAR (Pushed Authorization Request)**.
+
+This flow involves 2 steps:
+
+1. **PAR (`/auth/par`)** → Register signed request object  
+2. **Backchannel (`/auth/backchannel-authentication`)** → Initiate authentication  
 
 This endpoint expects:
 
@@ -61,18 +69,16 @@ This endpoint expects:
   - `login_hint` (user email)  
   - `scope`  
   - `authorization_details` (RAR)  
-- A **RAR object** specifying biometric authentication requirements 
-- Signs the CIBA authorization JWT using RS256 with required claims and a short-lived expiry.
-  - openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.key
- 
+- A **RAR object** specifying biometric or transaction requirements  
+- All JWTs must be signed using **PS256** with short-lived expiry  
 
 ---
 
-### **Request**
+### **Step 1: PAR Request**
 
-`POST {{domain}}/api/auth/authorize`
+`POST {{domain}}/api/auth/par`
 
-#### **Body (raw JSON)**
+#### **Body (x-www-form-urlencoded or JSON)**
 ```json
 {
   "client_id": CLIENT_ID,
@@ -80,7 +86,33 @@ This endpoint expects:
   "request": "<REQUEST_OBJECT_JWT>",
   "client_assertion": "<CLIENT_ASSERTION_JWT>"
 }
+
+---
+
+### **Response**
+
+```json
+{
+  "request_uri": "urn:ietf:params:oauth:request_uri:xyz",
+  "expires_in": 90
+}
 ```
+
+---
+
+
+### **Step 2: Backchannel Authentication**
+
+`POST {{domain}}/api/auth/backchannel-authentication`
+
+#### **Body (x-www-form-urlencoded or JSON)**
+```json
+{
+  "client_id": CLIENT_ID,
+  "request_uri": "<REQUEST_URI_FROM_PAR>",
+  "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+  "client_assertion": "<CLIENT_ASSERTION_JWT>"
+}
 
 ---
 
@@ -100,24 +132,119 @@ This endpoint expects:
 
 | Field        | Description                                           |
 |--------------|-------------------------------------------------------|
-| auth_req_id  | Unique CIBA authentication request ID                |
-| expires_in   | Validity of the request (in seconds)                 |
-| interval     | Polling frequency for token endpoint (in seconds)    |
+| request_uri  | Reference to pushed authorization request             |
+| auth_req_id  | Unique CIBA authentication request ID                 |
+| expires_in   | Validity of the request (in seconds)                  |
+| interval     | Polling frequency for token endpoint (in seconds)     |
 
 ---
+
+
+
 
 ## RAR Structure (JSON Reference)
 
 ```json
-[
-  {
-    "type": "biometric_auth",
-    "purpose": "secure_login",
-    "resource": "CLIENT_ID",
-    "actions": ["authenticate"],
-    "device_binding": "nfc-card"
-  }
-]
+    [
+      {
+        "type": "biometric_auth",
+        "purpose": "secure_login",
+        "resource": "CLIENT_ID",
+        "actions": ["authenticate"],
+        "device_binding": "nfc-card"
+      }
+    ]
+
+    [
+      {
+        type: "transfer",
+        purpose: "transaction_approval",
+        actions: ["approve"],
+        resource: CLIENT_ID,
+        amount: {
+          value: "5000",
+          currency: "USDT"
+        },
+        destination: {
+          address: "0xabcd1234ef567890",
+          network: "ethereum"
+        }
+      }
+    ]
+
+    [
+      {
+        type: "payment_initiation",
+        purpose: "merchant_checkout",
+        resource: CLIENT_ID,
+        creditor: {
+          name: "Acme Online Store",
+          account: "DE89370400440532013000"
+        },
+        instructedAmount: {
+          currency: "EUR",
+          amount: "249.99"
+        },
+        remittanceInformation: "Order #84512",
+        executionDate: "2026-02-25"
+      }
+    ]
+
+    [
+      {
+        type: "account_information",
+        purpose: "financial_overview",
+        resource: CLIENT_ID,
+        actions: [
+          "read_balances",
+          "read_transactions"
+        ],
+        accounts: [
+          {
+            iban: "FR7630006000011234567890189"
+          }
+        ],
+        time_period: {
+          from: "2026-01-01",
+          to: "2026-02-20"
+        }
+      }
+    ]
+
+    [
+      {
+        type: "crypto_wallet_sign",
+        purpose: "smart_contract_execution",
+        resource: CLIENT_ID,
+        wallet: {
+          address: "0xabcd1234ef567890",
+          network: "ethereum"
+        },
+        contract: {
+          address: "0xdef7890123456789",
+          method: "swapExactTokensForETH"
+        },
+        max_gas_fee: {
+          value: "0.02",
+          currency: "ETH"
+        }
+      }
+    ]
+
+    [
+      {
+        type: "identity_verification",
+        purpose: "loan_application",
+        resource: CLIENT_ID,
+        requested_claims: [
+          "full_name",
+          "date_of_birth",
+          "national_id_number"
+        ],
+        verification_level: "liveness_plus_document",
+        validity_period: 86400
+      }
+    ]
 ```
 
 ---
@@ -132,6 +259,7 @@ Must include the following claims:
 - `sub`
 - `aud`
 - `exp`
+- `iat`
 - `jti`
 
 ---
@@ -146,72 +274,111 @@ Must include:
 - `scope`
 - `aud`
 - `exp`
+- `iat`
 
-These JWTs must follow **OIDC CIBA specifications** and must be signed using **RS256**.
+These JWTs must follow **OIDC CIBA specifications** and must be signed using **PS256**.
 
 
 ```js
 // ----- Build RAR (Rich Authorization Request) -----
-const authorizationDetails = [
-  {
-    type: "biometric_auth",
-    purpose: "secure_login",
-    resource: CLIENT_ID,
-    actions: ["authenticate"],
-    device_binding: "nfc-card"
-  }
-];
+ const authorizationDetails = [
+      {
+        type: "biometric_assertion",
+        purpose: "secure_login",
+        resource: CLIENT_ID,
+        actions: ["authenticate"],
+        device_binding: "nfc-card"
+      }
+    ];
 
-// ----- Build Client Assertion (JWT) -----
-const clientAssertion = jwt.sign(
-  {
-    iss: CLIENT_ID,
-    sub: CLIENT_ID,
-    aud: `${AUTH_SERVER_URL}/token`,
-    jti: crypto.randomBytes(16).toString("hex"),
-    exp: Math.floor(Date.now() / 1000) + 60
-  },
-  privateKey,
-  { algorithm: "RS256" }
-);
+    // Build JWT client assertion for auth
+    const clientAssertion = jwt.sign(
+      {
+        iss: CLIENT_ID,
+        sub: CLIENT_ID,
+        aud: `${AUTH_SERVER_URL}/auth/par`,
+        jti: crypto.randomBytes(16).toString("hex"),
+        exp: Math.floor(Date.now() / 1000) + 60,
+        iat: Math.floor(Date.now() / 1000),
+      },
+      privateKey,
+      { algorithm: "PS256", keyid: key_id }
+    );
+    // Build REQUEST OBJECT (protects all CIBA request parameters)
+    const requestObject = jwt.sign(
+      {
+        iss: CLIENT_ID,
+        sub: CLIENT_ID,
+        aud: `${AUTH_SERVER_URL}/auth/backchannel-authentication`,
+        client_id: CLIENT_ID,
+        login_hint: email,
+        scope: "openid profile email",
+        authorization_details: authorizationDetails,
+        jti: crypto.randomBytes(16).toString("hex"),
+        exp: Math.floor(Date.now() / 1000) + 60,
+        iat: Math.floor(Date.now() / 1000)
+      },
+      privateKey,
+      { algorithm: "PS256", keyid: key_id }
+    );
+    // Request CIBA authentication
+    const resp = await axios.post(
+      `${AUTH_SERVER_URL}/auth/par`,
+      {
+        client_id: CLIENT_ID,
+        request: requestObject,
+        client_assertion_type:
+          "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        client_assertion: clientAssertion
+      },
+      {
+        httpsAgent,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Cache-Control": "no-store",
+          "Pragma": "no-cache"
+        }
+      }
+    );
 
-// ----- Build Request Object (JWT) -----
-const requestObject = jwt.sign(
-  {
-    iss: CLIENT_ID,
-    aud: `${AUTH_SERVER_URL}/auth/authorize`,
-    client_id: CLIENT_ID,
-    login_hint: email,
-    scope: "openid profile email",
-    authorization_details: authorizationDetails,
-    jti: crypto.randomBytes(16).toString("hex"),
-    nbf: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 60
-  },
-  privateKey,
-  { algorithm: "RS256" }
-);
+    let { request_uri, expires_in } = resp.data;
+    console.log("CIBA PAR initiated, request_uri:", request_uri);
 
-// ----- Send CIBA Authorization Request -----
-const resp = await axios.post(
-  `${AUTH_SERVER_URL}/auth/authorize`,
-  {
-    client_id: CLIENT_ID,
-    request: requestObject,
-    client_assertion_type:
-      "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-    client_assertion: clientAssertion
-  },
-  {
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      "Pragma": "no-cache"
-    }
-  }
-);
+    // Build JWT client assertion for auth
+    const clientAssertion2 = jwt.sign(
+      {
+        iss: CLIENT_ID,
+        sub: CLIENT_ID,
+        aud: `${AUTH_SERVER_URL}/auth/backchannel-authentication`,
+        jti: crypto.randomBytes(16).toString("hex"),
+        exp: Math.floor(Date.now() / 1000) + 60,
+        iat: Math.floor(Date.now() / 1000),
+      },
+      privateKey,
+      { algorithm: "PS256", keyid: key_id }
+    );
 
-const { auth_req_id, expires_in, interval } = resp.data;
+    // Request CIBA authentication
+    const resp2 = await axios.post(
+      `${AUTH_SERVER_URL}/auth/backchannel-authentication`,
+      {
+        client_id: CLIENT_ID,
+        request_uri: request_uri,
+        client_assertion_type:
+          "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        client_assertion: clientAssertion2
+      },
+      {
+        httpsAgent,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Cache-Control": "no-store",
+          "Pragma": "no-cache"
+        }
+      }
+    );
+
+    ({ auth_req_id, expires_in, interval } = resp2.data);
 ```
 
 
@@ -219,7 +386,7 @@ const { auth_req_id, expires_in, interval } = resp.data;
 
 ## /api/auth/token — CIBA Polling
 Token polling endpoint for **OIDC CIBA**.  
-The client calls this endpoint repeatedly (based on the `interval` value from `/api/auth/authorize`) until the request is approved / rejected / expired.    
+The client calls this endpoint repeatedly (based on the `interval` value from `/api/auth/backchannel-authentication`) until the request is approved / rejected / expired.    
 
 Clients must respect the interval value. Polling faster may result in slow_down or temporary blocking.
 
@@ -228,14 +395,13 @@ Clients must respect the interval value. Polling faster may result in slow_down 
 ### **Request**
 `POST {{domain}}/api/auth/token`
 
-#### **Body (raw JSON)**
+#### **Body (x-www-form-urlencoded)**
 ```json
-{
-  "grant_type": "urn:openid:params:grant-type:ciba",
-  "auth_code": auth_req_id, // uuid format
-  "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-  "client_assertion": "signed_req"
-}
+  grant_type=urn:openid:params:grant-type:ciba
+  auth_req_id=AUTH_REQ_ID
+  client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+  client_assertion=SIGNED_JWT
+
 ```
 
 ---
@@ -264,12 +430,21 @@ Returned when biometric approval has **not yet been completed**.
 }
 ```
 
+#### **Rejected Response**  
+Returned when biometric approval **rejected**.
+
+```json
+{
+  "status": "request_rejected"
+}
+```
+
 #### **Expired Response**  
 Returned when biometric approval timeline has **expired**.
 
 ```json
 {
-  "status": "invalid_authorization_code"
+  "status": "expired_token"
 }
 ```
 
@@ -281,65 +456,76 @@ Returned when biometric approval timeline has **expired**.
 
 // ----- Build Client Assertion for Token Request -----
 
-const clientAssertion = jwt.sign(
-  {
-    iss: CLIENT_ID,
-    sub: CLIENT_ID,
-    aud: `${AUTH_SERVER_URL}/token`,
-    jti: Math.random().toString(36).substring(2),
-    exp: Math.floor(Date.now() / 1000) + 60
-  },
-  privateKey,
-  { algorithm: "RS256" }
-);
+ const clientAssertion = jwt.sign(
+      {
+        iss: CLIENT_ID,
+        sub: CLIENT_ID,
+        aud: `${AUTH_SERVER_URL}/auth/token`,
+        jti: Math.random().toString(36).substring(2),
+        exp: Math.floor(Date.now() / 1000) + 60,
+        iat: Math.floor(Date.now() / 1000),
+      },
+      privateKey,
+      { algorithm: "PS256", keyid: key_id }
+    );
 
 
-// ----- Send Token Request (CIBA Polling) -----
+ const params = new URLSearchParams();
+    params.append("grant_type", "urn:openid:params:grant-type:ciba");
+    params.append("auth_req_id", auth_req_id);
+    params.append(
+      "client_assertion_type",
+      "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+    );
+    params.append("client_assertion", clientAssertion);
 
-const resp = await axios.post(
-  `${AUTH_SERVER_URL}/auth/token`,
-  {
-    grant_type: "urn:openid:params:grant-type:ciba",
-    auth_code: auth_req_id,  // from /auth/authorize response
-    client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-    client_assertion: clientAssertion
-  },
-  {
-    headers: { "Content-Type": "application/json" }
-  }
-);
+    const resp = await axios.post(
+      `${AUTH_SERVER_URL}/auth/token`,
+      params,
+      {
+        httpsAgent,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
 
 // ----- Handle Response -----
-console.log("Token response:", resp.data);
-const tokens = resp.data;
+    console.log("Token response:", resp.data);
+    const tokens = resp.data;
     if (!tokens.id_token) {
         return res.json({ status: resp.data.status });
     }
 
 // Success → tokens returned
 // Pending → { status: "authorization_pending" }
-// Expired → { status: "invalid_authorization_code" }
+// Expired → { status: "expired_token" }
 // Failed → { status: "error_message" }
 
 
-// verifying Auth server Paseto Signature
- const payload = await verifyPaseto(tokens.id_token);
-    if (!payload) {
-      return res.json({ status: "invalid_token" });
-    }
+// verifying Auth server Signature
 
-// generate jwt for internal client front - back authentication
+  const JWKS = createRemoteJWKSet(
+    new URL(`${AUTH_SERVER_URL}/auth/jwks.json`)
+  );
+
+  const { payload } = await jwtVerify(tokens.id_token, JWKS, {
+      issuer: JWT_ISSUER,
+      audience: CLIENT_ID,
+    });
+
+    console.log("ID Token payload:");
+    console.dir(payload, { depth: null, colors: true });
+
     const sessionToken = jwt.sign(
       {
         email: payload.email,
         name: payload.sub,
         acr: payload.acr || "urn:mfa:biometric",
       },
-      process.env.RP_SESSION_SECRET, // client secret
+      process.env.RP_SESSION_SECRET,
       { expiresIn: "1h" }
     );
-
-    authRequests.set(auth_req_id, { status: "authenticated", tokens });
 
     return res.json({
       status: "authenticated",
@@ -353,51 +539,6 @@ const tokens = resp.data;
       refresh_token: tokens.refresh_token
     });
 
-
-
-
-let pasetoPublicKey = null;
-
-// Verifies the PASETO’s signature, issuer, audience, and expiration to ensure the token is authentic, untampered, and intended for this client.
-
-async function verifyPaseto(token) {
-  try {
-
-    if (!pasetoPublicKey) {
-        const jwks = await fetch(`${AUTH_SERVER_URL}/auth/jwks.json`)
-          .then(res => res.json());
-
-        pasetoPublicKey = loadPasetoPublicKeyFromJwks(jwks);
-      }
-
-    const payload = await V2.verify(token, pasetoPublicKey, {
-      issuer: "https://saxess.identity",
-      audience: CLIENT_NAME,
-    });
-
-    if (payload.exp < Date.now() / 1000) {
-      throw new Error("Token expired");
-    }
-
-    console.log(" PASETO verified:", payload);
-    return payload;
-
-  } catch (err) {
-    console.error(" Invalid token:", err.message);
-    return null;
-  }
-}
-
-function loadPasetoPublicKeyFromJwks(jwks, kid = "saxess-key-1") {
-  const key = jwks.keys.find(k => k.kid === kid);
-  if (!key) throw new Error("JWKS key not found");
-
-  if (key.kty !== "OKP" || key.crv !== "Ed25519") {
-    throw new Error("Invalid key type in JWKS");
-  }
-
-  return Buffer.from(key.x, "base64url");
-}
 
 ```
 
@@ -414,15 +555,15 @@ Used when the existing access token has expired and the client needs to rotate t
 ### **Request**
 `POST {{domain}}/api/auth/token`
 
-#### **Body (raw JSON)**
+#### **Body (x-www-form-urlencoded)**
 ```json
-{
-  "grant_type": "refresh_token",
-  "refresh_token": "xxx",
-  "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-  "client_assertion": "signed_jwt"
-}
+  grant_type=urn:openid:params:grant-type:ciba
+  refresh_token: "xxx",
+  client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+  client_assertion=SIGNED_JWT
+
 ```
+
 
 ---
 
@@ -448,3 +589,120 @@ Returned when the refresh token is valid.
 ```
 
 ---
+
+
+
+## /api/orgs/{org_id}/employees/auto-invite — Invite User/Employee
+
+ - Invite a new employee/user to the organization
+
+
+---
+
+### **Request**
+`POST {{domain}}/api/orgs/{org_id}/employees/auto-invite`
+
+#### **Headers **
+```json
+Content-Type: application/json
+X-Signature: BASE64_ENCODED_RSA_SHA256_SIGNATURE
+X-Key-Id: CLIENT_KEY_ID
+```
+
+#### **Body (application/json)**
+```json
+{
+  "email": "user@example.com",
+  "full_name": "John Doe",
+  "client_id": "sync-client", // Client identifier issued during onboarding
+  "auto_approve": true, // If true, user is auto-approved after device registration; otherwise remains pending and need dashboard approval
+  "timestamp": 1710000000 // Unix timestamp (used for replay protection)
+}
+```
+
+#### **Request Signing **
+The request body must be:
+ - JSON stringified
+ - Signed using RSA-SHA256 with the client’s private key
+ - Signature sent in X-Signature header (Base64 encoded)
+ - Server verifies signature using the client’s public key
+ - timestamp is validated to prevent replay attacks (recommended ±2 min window)
+ - X-Key-Id is used to identify which public key to use for verification
+
+```json
+const signature = crypto.sign(
+  "RSA-SHA256",
+  Buffer.from(JSON.stringify(body)),
+  privateKey
+).toString("base64");
+```
+
+---
+
+### **Response**
+
+#### **Successful Response**  
+Returned when the invite is successfully created.
+```json
+{
+  id: user_id,
+  email: 'user_email',
+  full_name: 'user_name',
+  status: 'invited',
+  org_id: org_id,
+  org_name: org_name
+}
+```
+
+#### **Errors**
+```json
+{
+  "error": [
+    "invalid_request",
+    "missing_signature_headers",
+    "invalid_timestamp",
+    "invalid_client",
+    "invalid_public_key",
+    "invalid_signature"
+  ]
+}
+```
+
+#### ** Example Code
+```js
+
+ const timestamp = Math.floor(Date.now() / 1000);
+
+  const body = {
+    email: "himang305+3@gmail.com",
+    full_name: "Himanshu Tests",
+    client_id: "sync-client",
+    auto_approve: true,
+    timestamp: timestamp
+  };
+
+  const bodyString = JSON.stringify(body);
+  const signature = crypto.sign(
+    "RSA-SHA256",
+    Buffer.from(bodyString),
+    privateKey
+  );
+  const signatureBase64 = signature.toString("base64");
+
+  axios.post(
+    AUTH_SERVER_URL + "/orgs/2/employees/auto-invite",
+    body,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "X-Signature": signatureBase64,
+        "X-Key-Id": key_id
+      }
+    }
+  ).then(res => {
+    console.log(res.data);
+  }).catch(err => {
+    console.error(err.response?.data || err);
+  });
+  
+```
