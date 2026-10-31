@@ -605,7 +605,7 @@ Returned when the refresh token is valid.
 #### **Headers **
 ```json
 Content-Type: application/json
-X-Signature: BASE64_ENCODED_RSA_SHA256_SIGNATURE
+X-Signature: BASE64_ENCODED_PS256_SIGNATURE
 X-Key-Id: CLIENT_KEY_ID
 ```
 
@@ -623,7 +623,7 @@ X-Key-Id: CLIENT_KEY_ID
 #### **Request Signing **
 The request body must be:
  - JSON stringified
- - Signed using RSA-SHA256 with the client’s private key
+ - Signed using PS256 (RSA-PSS with SHA-256) with the client's private key
  - Signature sent in X-Signature header (Base64 encoded)
  - Server verifies signature using the client’s public key
  - timestamp is validated to prevent replay attacks (recommended ±2 min window)
@@ -631,9 +631,13 @@ The request body must be:
 
 ```json
 const signature = crypto.sign(
-  "RSA-SHA256",
+  "sha256",
   Buffer.from(JSON.stringify(body)),
-  privateKey
+  {
+    key: privateKey,
+    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+    saltLength: 32
+  }
 ).toString("base64");
 ```
 
