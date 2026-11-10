@@ -413,10 +413,10 @@ Returned when the user has approved biometric authentication.
 
 ```json
 {
-  "access_token": "ACCESS_TOKEN_VALUE", // PASETO v2 public
+  "access_token": "ACCESS_TOKEN_VALUE", 
   "token_type": "Bearer",
   "expires_in": 3600,
-  "id_token": "ID_TOKEN_VALUE", // PASETO v2 public
+  "id_token": "ID_TOKEN_VALUE", 
   "refresh_token": "REFRESH_TOKEN_VALUE"
 }
 ```
