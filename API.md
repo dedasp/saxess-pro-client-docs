@@ -20,7 +20,7 @@ All endpoints listed below are **official**, **stable**, and **supported**.
     - Exchange refresh token for new access token
   - [/api/orgs/{org_id}/employees/auto-invite — Invite User/Employee](#apiorginvite)
     - Invite a user/employee programmatically with optional auto-approval.
-    - Requests must be signed using RSA-SHA256 to ensure authenticity and integrity.
+    - Requests must be signed using RSA_PKCS1_PSS_PADDING to ensure authenticity and integrity.
 ---
 
 ## General API Information
@@ -686,11 +686,17 @@ Returned when the invite is successfully created.
   };
 
   const bodyString = JSON.stringify(body);
-  const signature = crypto.sign(
-    "RSA-SHA256",
-    Buffer.from(bodyString),
-    privateKey
-  );
+
+  // PS256: RSA-PSS with SHA-256
+    const signature = crypto.sign(
+      "sha256",
+      Buffer.from(bodyString, "utf8"),
+      {
+        key: privateKey2,
+        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+        saltLength: 32
+      }
+    );
   const signatureBase64 = signature.toString("base64");
 
   axios.post(
